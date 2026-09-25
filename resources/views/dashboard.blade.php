@@ -40,7 +40,7 @@
                 @foreach ($availableSearches as $search)
                 <div class="availability-item">
                     <div class="date-tile available-date"><strong>{{ $search->visit_date->format('d') }}</strong><span>{{ $search->visit_date->format('M Y') }}</span></div>
-                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small>Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = Str::contains(Str::lower($item['title']), ['vatican museums - admission ticket', 'vatican museums - guided tours for individuals']); @endphp<div @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a></div>@endforeach</div></div>
+                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small>Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><div class="handoff-options" data-max="{{ $search->visitor_count }}"><label>Participants 1<select data-handoff="full">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}" @selected($i === $search->visitor_count)>{{ $i }}</option>@endfor</select></label><label>Participants 2<select data-handoff="reduced">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}">{{ $i }}</option>@endfor</select></label><label>Language<select data-handoff="lang"><option selected>English</option><option>Italiano</option><option>Español</option><option>Français</option><option>Deutsch</option></select></label></div><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = Str::contains(Str::lower($item['title']), ['vatican museums - admission ticket', 'vatican museums - guided tours for individuals']); @endphp<div @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a>@php $openSlots = collect($item['slots'] ?? [])->contains(fn ($slot) => in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true)); @endphp @if ($openSlots)<div class="slot-row">@foreach ($item['slots'] as $slot)@php $slotOpen = in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true); @endphp<button type="button" class="slot-chip {{ $slotOpen ? 'open' : 'sold' }}" data-time="{{ $slot['time'] }}" @disabled(! $slotOpen)><b>{{ $slot['time'] }}</b><small>{{ $slotOpen ? 'Available' : 'Sold out' }}</small></button>@endforeach</div>@endif</div>@endforeach</div></div>
                     <form method="POST" action="{{ route('booking-searches.destroy', $search) }}" data-ajax-delete>@csrf @method('DELETE')<button type="submit" class="text-button">Remove</button></form>
                 </div>
                 @endforeach
@@ -105,6 +105,17 @@
     .availability-panel .detected-items > div.priority-ticket > span { color: #78350f; font-weight: 600; }
     .availability-panel .detected-items > div.priority-ticket a.text-button { background: linear-gradient(135deg, #d97706, #f59e0b); box-shadow: 0 6px 16px rgba(217, 119, 6, .45); }
     .priority-badge { display: inline-block; font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 2px 8px; margin-right: 6px; border-radius: 999px; background: #b45309; color: #fff; }
+    .handoff-options { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+    .handoff-options label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; color: #065f46; text-transform: uppercase; letter-spacing: .05em; }
+    .handoff-options select { padding: 8px 12px; border-radius: 10px; border: 1px solid #a7f3d0; background: #fff; font: inherit; font-size: 13px; }
+    .slot-row { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+    .slot-load { border: 1px dashed #059669; background: transparent; color: #047857; border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .slot-chip { display: grid; gap: 1px; min-width: 76px; padding: 7px 12px; border-radius: 12px; border: 2px solid transparent; font: inherit; text-align: center; cursor: pointer; }
+    .slot-chip b { font-size: 14px; }
+    .slot-chip small { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+    .slot-chip.open { background: #d1fae5; color: #065f46; border-color: #6ee7b7; }
+    .slot-chip.open.picked { background: #059669; color: #fff; border-color: #047857; }
+    .slot-chip.sold { background: #fee2e2; color: #b91c1c; border-color: #fecaca; cursor: not-allowed; opacity: .8; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes toast-in { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 </style>
@@ -119,6 +130,36 @@
         toastContainer.appendChild(toast);
         window.setTimeout(() => toast.remove(), 4500);
     }
+
+    document.addEventListener('change', (event) => {
+        const container = event.target.closest?.('.watch-details');
+        if (!container || !event.target.dataset.handoff) return;
+        const max = Number(container.querySelector('.handoff-options')?.dataset.max ?? 0);
+        const key = event.target.dataset.handoff;
+        const other = container.querySelector(`[data-handoff="${key === 'full' ? 'reduced' : 'full'}"]`);
+        if (other && ['full', 'reduced'].includes(key)) other.value = String(Math.max(0, max - Number(event.target.value)));
+        const params = new URLSearchParams();
+        container.querySelectorAll('[data-handoff]').forEach((select) => params.set(select.dataset.handoff, select.value));
+        container.querySelectorAll('.detected-items a').forEach((link) => {
+            const time = new URL(link.href, location.href).searchParams.get('time');
+            if (time) params.set('time', time);
+            link.href = link.href.split('?')[0] + '?' + params.toString();
+        });
+    });
+
+    document.addEventListener('click', (event) => {
+        const chip = event.target.closest?.('.slot-chip.open');
+        if (chip) {
+            const wrapper = chip.closest('.detected-items > div');
+            const link = wrapper.querySelector('a.text-button');
+            const selected = !chip.classList.contains('picked');
+            wrapper.querySelectorAll('.slot-chip').forEach((c) => c.classList.remove('picked'));
+            const url = new URL(link.href, location.href);
+            url.searchParams.delete('time');
+            if (selected) { chip.classList.add('picked'); url.searchParams.set('time', chip.dataset.time); }
+            link.href = url.toString();
+        }
+    });
 
     function confirmToast(message) {
         return new Promise((resolve) => {

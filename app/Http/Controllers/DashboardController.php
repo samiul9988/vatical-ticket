@@ -70,7 +70,7 @@ class DashboardController extends Controller
         return to_route('dashboard')->with('success', 'Availability listing removed.');
     }
 
-    public function openAvailability(BookingSearch $search, string $item, VaticanAvailabilityChecker $checker): RedirectResponse
+    public function openAvailability(Request $request, BookingSearch $search, string $item, VaticanAvailabilityChecker $checker): RedirectResponse
     {
         try {
             $url = $checker->bookingUrlForItem($search, $item);
@@ -82,6 +82,17 @@ class DashboardController extends Controller
             return to_route('dashboard')->with('error', 'This ticket is no longer available. Refresh the dashboard and try again.');
         }
 
-        return redirect()->away($url);
+        $title = collect($search->availability_items ?? [])->firstWhere('id', $item)['title'] ?? '';
+
+        $handoff = http_build_query([
+            'book' => $item,
+            'title' => $title,
+            'full' => max(0, min(30, $request->integer('full', $search->visitor_count))),
+            'reduced' => max(0, min(30, $request->integer('reduced'))),
+            'lang' => $request->string('lang', 'English')->limit(20)->toString(),
+            'time' => $request->string('time')->limit(10)->toString(),
+        ]);
+
+        return redirect()->away($url.'#'.$handoff);
     }
 }
