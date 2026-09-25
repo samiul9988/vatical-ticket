@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vatican ticket panel opener
 // @namespace    vatican-ticket-admin
-// @version      1.7
+// @version      1.9
 // @description  Opens the ticket panel chosen on the admin dashboard (#book=<ticketId>). Never submits, proceeds or pays.
 // @match        https://tickets.museivaticani.va/*
 // @run-at       document-start
@@ -108,24 +108,39 @@
         return { results, found: { full, reduced, language } };
     };
 
-    const findSlot = () => Array.from(document.querySelectorAll('app-time-table *, [class*="time"] *, button, div, span, label'))
-        .filter((el) => el.children.length <= 2 && normalise(el.textContent).startsWith(pending.time) && !/sold/i.test(el.textContent))
-        .sort((a, b) => a.textContent.length - b.textContent.length)[0];
+    // Each slot is <div class="muvaCalendarDayBorder"> holding <div class="muvaCalendarNumber">HH:MM</div> and, when sold out, <div class="muvaCalendarDaySoldOut">.
+    const findSlot = () => Array.from(document.querySelectorAll('.muvaCalendarDayBorder'))
+        .find((cell) => !cell.querySelector('.muvaCalendarDaySoldOut') && normalise(cell.querySelector('.muvaCalendarNumber')?.textContent ?? '') === pending.time);
 
     const pickTime = async () => {
         if (!pending.time) return true;
-        let slot = findSlot();
-        if (!slot) {
+        let cell = findSlot();
+        if (!cell) {
             const hour = Number(pending.time.split(':')[0]);
             const tab = Array.from(document.querySelectorAll('button, div, span, li, a')).find((el) => el.children.length === 0 && normalise(el.textContent) === (hour >= 12 ? 'afternoon' : 'morning'));
             if (tab) {
                 fire(tab);
                 await wait(600);
-                slot = findSlot();
+                cell = findSlot();
             }
         }
-        if (!slot) return false;
-        fire(slot);
+        if (!cell) return false;
+
+        // The panel header shows "... | 30 September 2026 at 16:00" once the site has accepted the slot.
+        const accepted = () => new RegExp(`\\bat ${pending.time}\\b`).test(document.body.textContent);
+
+        cell.scrollIntoView({ block: 'center' });
+        for (let attempt = 0; attempt < 3 && !accepted(); attempt++) {
+            const current = findSlot() || cell;
+            fire(current.querySelector('.muvaCalendarNumber') || current);
+            await wait(700);
+            if (!accepted()) {
+                fire(current);
+                await wait(700);
+            }
+        }
+        console.log('[auto-book] time slot', pending.time, accepted() ? 'accepted by the site' : 'NOT accepted');
+        if (!accepted()) return false;
         return true;
     };
 
