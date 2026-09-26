@@ -2,13 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Events\PriorityTicketAvailable;
 use App\Models\BookingSearch;
 use App\Models\User;
 use App\Notifications\TicketAvailabilityDetected;
 use App\Services\VaticanAvailabilityChecker;
+use App\Support\PriorityTickets;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 
 #[Signature('vatican:check-availability')]
 #[Description('Check active Vatican ticket watches at a safe interval')]
@@ -52,6 +55,8 @@ class CheckVaticanAvailability extends Command
                 'last_error' => null,
             ]);
 
+            $this->broadcastPriorityTickets($search, $availability['items']);
+
             if ($availability['available']) {
                 $search->update([
                     'status' => 'manual_review',
@@ -79,5 +84,47 @@ class CheckVaticanAvailability extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Notify once per continuous availability window. The marker is only stored after a successful broadcast,
+     * so a failed Pusher call is retried on the next check, and it is cleared when the ticket sells out again.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function broadcastPriorityTickets(BookingSearch $search, array $items): void
+    {
+        $availablePriorityIds = [];
+
+        foreach ($items as $item) {
+            if (! PriorityTickets::matches($item['title'])) {
+                continue;
+            }
+
+            $availablePriorityIds[] = (string) $item['id'];
+
+            if (Cache::has($this->notifiedKey($search, $item['id']))) {
+                continue;
+            }
+
+            try {
+                event(PriorityTicketAvailable::forItem($search, $item));
+                Cache::put($this->notifiedKey($search, $item['id']), true, now()->addDay());
+                $this->info("Realtime notification sent for {$item['title']}.");
+            } catch (\Throwable $exception) {
+                $this->warn("Realtime notification failed, will retry: {$exception->getMessage()}");
+            }
+        }
+
+        foreach (collect($search->availability_items ?? [])->pluck('id')->map(fn ($id): string => (string) $id) as $previousId) {
+            if (! in_array($previousId, $availablePriorityIds, true)) {
+                Cache::forget($this->notifiedKey($search, $previousId));
+            }
+        }
+    }
+
+    private function notifiedKey(BookingSearch $search, int|string $itemId): string
+    {
+        return "priority-notified.{$search->id}.{$itemId}";
     }
 }

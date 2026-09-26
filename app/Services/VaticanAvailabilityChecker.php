@@ -72,8 +72,8 @@ class VaticanAvailabilityChecker
     private function client(): PendingRequest
     {
         return Http::acceptJson()
-            ->connectTimeout(10)
-            ->timeout(20)
+            ->connectTimeout(8)
+            ->timeout(12)
             ->withOptions(['cookies' => new CookieJar]);
     }
 

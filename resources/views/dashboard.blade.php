@@ -8,15 +8,13 @@
 </head>
 <body>
 <div class="app-shell">
-    <aside class="sidebar">
-        <div class="brand"><span class="brand-mark">✦</span><span>VATICAN<br><b>OPERATIONS</b></span></div>
-        <nav><a class="active" href="{{ route('dashboard') }}">Overview <span>⌂</span></a><a href="#new-search">Availability watcher <span>◷</span></a><a href="#activity">Activity log <span>≋</span></a></nav>
-        <div class="sidebar-foot">Official ticket workflow<br><small>Human checkout handoff enabled</small></div>
-    </aside>
+    @include('partials.sidebar', ['active' => 'overview'])
     <main class="main-content">
-        <header class="topbar"><div><p class="eyebrow">TICKET OFFICE / ADMIN</p><h1>Booking operations</h1></div><div class="operator"><span class="online-dot"></span> System ready <span class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span><form method="POST" action="{{ route('logout') }}">@csrf<button class="logout-button" style="border:0;background:transparent;color:#738092;cursor:pointer;font:inherit;padding:0" type="submit">Sign out</button></form></div></header>
+        <header class="topbar"><div><p class="eyebrow">TICKET OFFICE / ADMIN</p><h1>Booking operations</h1></div><div class="operator"><button type="button" id="sound-toggle" class="sound-toggle" title="Enable notification sound">🔔 Sound off</button><span class="online-dot"></span> System ready <span class="avatar">{{ strtoupper(substr(auth()->user()->name, 0, 1)) }}</span><form method="POST" action="{{ route('logout') }}">@csrf<button class="logout-button" style="border:0;background:transparent;color:#738092;cursor:pointer;font:inherit;padding:0" type="submit">Sign out</button></form></div></header>
         <section class="hero"><div><p class="eyebrow yellow">VATICAN MUSEUMS</p><h2>Reserve the moment<br><em>availability opens.</em></h2><p class="hero-copy">Set a visit date and one or more preferred schedules. The watcher checks at a controlled one-minute interval and alerts you when a manual checkout handoff is ready.</p></div><div class="hero-stat"><span>OFFICIAL CHECKOUT</span><strong>Manual handoff</strong><small>Payment and visitor details never leave your control.</small></div></section>
+        <div id="sound-config" data-url="{{ $soundUrl }}" hidden></div>
         <div id="toast-container" aria-live="polite"></div>
+        <div id="realtime-notifications" aria-live="assertive"></div>
         @if (session('success'))<div class="flash success">✓ {{ session('success') }}</div>@endif
         @if (session('error'))<div class="flash error">{{ session('error') }}</div>@endif
         @if ($errors->any())<div class="flash error">{{ $errors->first() }}</div>@endif
@@ -40,7 +38,7 @@
                 @foreach ($availableSearches as $search)
                 <div class="availability-item">
                     <div class="date-tile available-date"><strong>{{ $search->visit_date->format('d') }}</strong><span>{{ $search->visit_date->format('M Y') }}</span></div>
-                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small>Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><div class="handoff-options" data-max="{{ $search->visitor_count }}"><label>Participants 1<select data-handoff="full">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}" @selected($i === $search->visitor_count)>{{ $i }}</option>@endfor</select></label><label>Participants 2<select data-handoff="reduced">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}">{{ $i }}</option>@endfor</select></label><label>Language<select data-handoff="lang"><option selected>English</option><option>Italiano</option><option>Español</option><option>Français</option><option>Deutsch</option></select></label></div><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = Str::contains(Str::lower($item['title']), ['vatican museums - admission ticket', 'vatican museums - guided tours for individuals']); @endphp<div @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a>@php $openSlots = collect($item['slots'] ?? [])->contains(fn ($slot) => in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true)); @endphp @if ($openSlots)<div class="slot-row">@foreach ($item['slots'] as $slot)@php $slotOpen = in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true); @endphp<button type="button" class="slot-chip {{ $slotOpen ? 'open' : 'sold' }}" data-time="{{ $slot['time'] }}" @disabled(! $slotOpen)><b>{{ $slot['time'] }}</b><small>{{ $slotOpen ? 'Available' : 'Sold out' }}</small></button>@endforeach</div>@endif</div>@endforeach</div></div>
+                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small>Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><div class="handoff-options" data-max="{{ $search->visitor_count }}"><label>Participants 1<select data-handoff="full">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}" @selected($i === $search->visitor_count)>{{ $i }}</option>@endfor</select></label><label>Participants 2<select data-handoff="reduced">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}">{{ $i }}</option>@endfor</select></label><label>Language<select data-handoff="lang"><option selected>English</option><option>Italiano</option><option>Español</option><option>Français</option><option>Deutsch</option></select></label></div><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = \App\Support\PriorityTickets::matches($item['title']); @endphp<div id="ticket-{{ $search->id }}-{{ $item['id'] }}" @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a>@php $openSlots = collect($item['slots'] ?? [])->contains(fn ($slot) => in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true)); @endphp @if ($openSlots)<div class="slot-row">@foreach ($item['slots'] as $slot)@php $slotOpen = in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true); @endphp<button type="button" class="slot-chip {{ $slotOpen ? 'open' : 'sold' }}" data-time="{{ $slot['time'] }}" @disabled(! $slotOpen)><b>{{ $slot['time'] }}</b><small>{{ $slotOpen ? 'Available' : 'Sold out' }}</small></button>@endforeach</div>@endif</div>@endforeach</div></div>
                     <form method="POST" action="{{ route('booking-searches.destroy', $search) }}" data-ajax-delete>@csrf @method('DELETE')<button type="submit" class="text-button">Remove</button></form>
                 </div>
                 @endforeach
@@ -118,7 +116,25 @@
     .slot-chip.sold { background: #fee2e2; color: #b91c1c; border-color: #fecaca; cursor: not-allowed; opacity: .8; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes toast-in { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .sound-toggle { border: 1px solid #d9e0e8; background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; margin-right: 8px; }
+    .sound-toggle.on { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+    #realtime-notifications { position: fixed; top: 84px; right: 0; z-index: 1500; display: grid; gap: 12px; padding-right: 16px; max-width: 100vw; }
+    .rt-card { width: min(360px, calc(100vw - 32px)); background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border-radius: 16px 0 0 16px; padding: 16px 18px; box-shadow: 0 16px 40px rgba(217, 119, 6, .45); cursor: pointer; animation: rt-in .45s cubic-bezier(.2, .9, .3, 1.2); border-left: 6px solid #fff7ed; }
+    .rt-card small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; opacity: .9; }
+    .rt-card strong { display: block; font-size: 15px; margin: 4px 0; }
+    .rt-card span { font-size: 12px; opacity: .95; }
+    .rt-card em { display: block; margin-top: 8px; font-style: normal; font-size: 12px; font-weight: 700; }
+    .rt-card.leaving { animation: rt-out .3s ease-in forwards; }
+    .flash-target { animation: flash-target 2.4s ease-out 1; }
+    @keyframes rt-in { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes rt-out { to { transform: translateX(110%); opacity: 0; } }
+    @keyframes flash-target { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } 20%, 60% { box-shadow: 0 0 0 8px rgba(245, 158, 11, .55); } }
+    @media (max-width: 640px) { #realtime-notifications { top: 70px; padding-right: 8px; } }
 </style>
+@if (config('broadcasting.connections.pusher.key'))
+<script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
+@endif
+<script src="{{ asset('notification-sound.js') }}"></script>
 <script>
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || document.querySelector('input[name="_token"]')?.value;
     const toastContainer = document.getElementById('toast-container');
@@ -189,7 +205,7 @@
             if (!response.ok) return;
             const html = await response.text();
             const documentFragment = new DOMParser().parseFromString(html, 'text/html');
-            ['.metrics', '#availability-slot', '.activity-panel'].forEach((selector) => {
+            ['.metrics', '#availability-slot', '.activity-panel', '#sound-config'].forEach((selector) => {
                 const current = document.querySelector(selector);
                 const updated = documentFragment.querySelector(selector);
                 if (current && updated) current.replaceWith(updated);
@@ -235,6 +251,63 @@
         } catch (error) { showToast(error.message, 'error'); }
         finally { button.classList.remove('is-loading'); }
     });
+
+    const soundToggle = document.getElementById('sound-toggle');
+    let soundEnabled = false;
+    try { soundEnabled = localStorage.getItem('dashboardSound') === 'on'; } catch (error) { /* storage unavailable */ }
+
+    function renderSoundToggle() {
+        soundToggle.classList.toggle('on', soundEnabled);
+        soundToggle.textContent = soundEnabled ? '🔔 Sound on' : '🔔 Sound off';
+    }
+
+    function playMelody() {
+        if (!soundEnabled) return;
+        window.playNotificationSound(document.getElementById('sound-config')?.dataset.url || null);
+    }
+
+    soundToggle.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        try { localStorage.setItem('dashboardSound', soundEnabled ? 'on' : 'off'); } catch (error) { /* storage unavailable */ }
+        if (soundEnabled) { window.unlockNotificationAudio(); playMelody(); }
+        renderSoundToggle();
+    });
+    document.addEventListener('click', () => { if (soundEnabled) window.unlockNotificationAudio(); }, { once: true });
+    renderSoundToggle();
+
+    function showTicketNotification(data) {
+        const container = document.getElementById('realtime-notifications');
+        const card = document.createElement('div');
+        card.className = 'rt-card';
+        card.innerHTML = '<small>PRIORITY TICKET AVAILABLE</small><strong></strong><span></span><em>Click to jump to the Book button →</em>';
+        card.querySelector('strong').textContent = data.title;
+        card.querySelector('span').textContent = `${data.visit_date} · ${data.visitor_count} ${data.visitor_count === 1 ? 'visitor' : 'visitors'}`;
+        const dismiss = () => { card.classList.add('leaving'); window.setTimeout(() => card.remove(), 300); };
+        card.addEventListener('click', () => {
+            const target = document.getElementById(`ticket-${data.search_id}-${data.item_id}`);
+            dismiss();
+            if (!target) return;
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            target.classList.remove('flash-target');
+            void target.offsetWidth;
+            target.classList.add('flash-target');
+        });
+        container.appendChild(card);
+        window.setTimeout(dismiss, 30000);
+    }
+
+    @if (config('broadcasting.connections.pusher.key'))
+    const pusher = new Pusher(@json(config('broadcasting.connections.pusher.key')), {
+        cluster: @json(config('broadcasting.connections.pusher.options.cluster')),
+        forceTLS: true,
+        channelAuthorization: { endpoint: '/broadcasting/auth', headers: { 'X-CSRF-TOKEN': csrfToken } },
+    });
+    pusher.subscribe('private-admin-dashboard').bind('priority-ticket.available', async (data) => {
+        await refreshDashboard();
+        showTicketNotification(data);
+        playMelody();
+    });
+    @endif
 
     bindAjaxActions();
     window.setInterval(refreshDashboard, 60000);

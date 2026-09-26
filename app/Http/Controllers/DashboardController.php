@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BookingSearch;
+use App\Models\NotificationSound;
 use App\Services\VaticanAvailabilityChecker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +20,7 @@ class DashboardController extends Controller
                 ->where('status', 'manual_review')
                 ->latest('detected_at')
                 ->get(),
+            'soundUrl' => NotificationSound::activeUrl(),
             'watchingCount' => BookingSearch::query()->where('status', 'watching')->count(),
             'bookedCount' => BookingSearch::query()->where('status', 'booked')->count(),
         ]);
