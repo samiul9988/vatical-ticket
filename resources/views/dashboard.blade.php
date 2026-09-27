@@ -18,13 +18,14 @@
         @if (session('success'))<div class="flash success">✓ {{ session('success') }}</div>@endif
         @if (session('error'))<div class="flash error">{{ session('error') }}</div>@endif
         @if ($errors->any())<div class="flash error">{{ $errors->first() }}</div>@endif
-        <section class="metrics"><div class="metric"><span class="metric-icon blue">◷</span><div><small>ACTIVE WATCHES</small><strong>{{ $watchingCount }}</strong></div></div><div class="metric"><span class="metric-icon green">✓</span><div><small>BOOKED HANDOFFS</small><strong>{{ $bookedCount }}</strong></div></div><div class="metric"><span class="metric-icon gold">↗</span><div><small>CHECK INTERVAL</small><strong>1 min</strong></div></div></section>
+        <section class="metrics"><div class="metric"><span class="metric-icon blue">◷</span><div><small>ACTIVE WATCHES</small><strong>{{ $watchingCount }}</strong></div></div><div class="metric"><span class="metric-icon green">✓</span><div><small>BOOKED HANDOFFS</small><strong>{{ $bookedCount }}</strong></div></div><div class="metric"><span class="metric-icon gold">↗</span><div><small>CHECK INTERVAL</small><strong>{{ $checkIntervalSeconds >= 60 && $checkIntervalSeconds % 60 === 0 ? ($checkIntervalSeconds / 60).' min' : $checkIntervalSeconds.' sec' }}</strong></div></div></section>
+        <section class="panel ticket-visibility-panel"><div><p class="eyebrow">TICKET FILTER</p><h3>Show all ticket types</h3><span class="field-help">Off shows only Admission Ticket and Guided Tours for Individuals Museums when available.</span></div><form method="POST" action="{{ route('settings.ticket-visibility.update') }}" data-ajax-toggle>@csrf @method('PATCH')<label class="toggle-switch"><input type="checkbox" name="show_all_tickets" value="1" @checked($showAllTickets)><span class="toggle-track"><span class="toggle-thumb"></span></span></label></form></section>
         <div class="content-grid">
             <section class="panel form-panel" id="new-search"><div class="panel-heading"><div><p class="eyebrow">STEP 01</p><h3>Start an availability watch</h3></div><span class="step-badge">CONFIGURE</span></div>
                 <form method="POST" action="{{ route('booking-searches.store') }}" data-ajax-form>
                     @csrf
                     <div class="form-row"><label>Visit date<input type="date" name="visit_date" min="{{ now()->toDateString() }}" value="{{ old('visit_date', now()->addDay()->toDateString()) }}" required><small>Select the date from the Vatican calendar.</small></label><label>Visitors<input type="number" name="visitor_count" min="1" max="30" value="{{ old('visitor_count', 1) }}" required><small>Maximum 30 visitors per watch.</small></label></div>
-                    <fieldset><legend>Preferred schedules</legend><p class="field-help">Choose one or more times. The watcher will evaluate them in this order.</p><div class="schedule-grid">@foreach(['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30'] as $time)<label class="schedule-option"><input type="checkbox" name="schedules[]" value="{{ $time }}" @checked(in_array($time, old('schedules', []), true))><span>{{ $time }}</span></label>@endforeach</div></fieldset>
+                    @foreach(['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30'] as $time)<input type="hidden" name="schedules[]" value="{{ $time }}">@endforeach
                     <div class="form-footer"><span>Next: availability only. Checkout stays manual.</span><button type="submit" class="button primary submit-button"><span class="button-label">Confirm watch <span>→</span></span><span class="button-spinner" aria-hidden="true"></span></button></div>
                 </form>
             </section>
@@ -38,7 +39,7 @@
                 @foreach ($availableSearches as $search)
                 <div class="availability-item">
                     <div class="date-tile available-date"><strong>{{ $search->visit_date->format('d') }}</strong><span>{{ $search->visit_date->format('M Y') }}</span></div>
-                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small>Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><div class="handoff-options" data-max="{{ $search->visitor_count }}"><label>Participants 1<select data-handoff="full">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}" @selected($i === $search->visitor_count)>{{ $i }}</option>@endfor</select></label><label>Participants 2<select data-handoff="reduced">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}">{{ $i }}</option>@endfor</select></label><label>Language<select data-handoff="lang"><option selected>English</option><option>Italiano</option><option>Español</option><option>Français</option><option>Deutsch</option></select></label></div><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = \App\Support\PriorityTickets::matches($item['title']); @endphp<div id="ticket-{{ $search->id }}-{{ $item['id'] }}" @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a>@php $openSlots = collect($item['slots'] ?? [])->contains(fn ($slot) => in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true)); @endphp @if ($openSlots)<div class="slot-row">@foreach ($item['slots'] as $slot)@php $slotOpen = in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true); @endphp<button type="button" class="slot-chip {{ $slotOpen ? 'open' : 'sold' }}" data-time="{{ $slot['time'] }}" @disabled(! $slotOpen)><b>{{ $slot['time'] }}</b><small>{{ $slotOpen ? 'Available' : 'Sold out' }}</small></button>@endforeach</div>@endif</div>@endforeach</div></div>
+                    <div class="watch-details"><strong>{{ count($search->availability_items ?? []) }} available ticket{{ count($search->availability_items ?? []) === 1 ? '' : 's' }}</strong><span>{{ $search->visitor_count }} {{ Str::plural('visitor', $search->visitor_count) }} · Preferred: {{ implode(', ', $search->schedules) }}</span><small class="detected-at" data-detected-at="{{ $search->detected_at?->toIso8601String() }}">Detected {{ $search->detected_at?->diffForHumans() ?? 'recently' }}</small><small class="next-check" data-next-check-at="{{ $search->next_check_at?->toIso8601String() }}"></small><div class="handoff-options" data-max="{{ $search->visitor_count }}"><label>Participants 1<select data-handoff="full">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}" @selected($i === $search->visitor_count)>{{ $i }}</option>@endfor</select></label><label>Participants 2<select data-handoff="reduced">@for($i = 0; $i <= $search->visitor_count; $i++)<option value="{{ $i }}">{{ $i }}</option>@endfor</select></label><label>Language<select data-handoff="lang"><option selected>English</option><option>Italiano</option><option>Español</option><option>Français</option><option>Deutsch</option></select></label></div><div class="detected-items">@foreach ($search->availability_items ?? [] as $item)@php $isPriority = \App\Support\PriorityTickets::matches($item['title']); @endphp<div id="ticket-{{ $search->id }}-{{ $item['id'] }}" @class(['priority-ticket' => $isPriority])><span>@if ($isPriority)<em class="priority-badge">★ PRIORITY</em> @endif{{ $item['title'] }} <b>{{ str_replace('_', ' ', strtolower($item['availability'])) }}</b></span><a class="text-button" href="{{ route('booking-searches.availability', [$search, $item['id']]) }}" target="_blank" rel="noreferrer">Book ↗</a>@php $uniqueSlots = collect($item['slots'] ?? [])->unique('time')->values(); @endphp @if ($uniqueSlots->isNotEmpty())<div class="slot-row">@foreach ($uniqueSlots as $slot)@php $slotOpen = in_array($slot['availability'], ['AVAILABLE', 'LOW_AVAILABILITY'], true); @endphp<button type="button" class="slot-chip {{ $slotOpen ? 'open' : 'sold' }}" data-time="{{ $slot['time'] }}" @disabled(! $slotOpen)><b>{{ $slot['time'] }}</b><small>{{ $slotOpen ? 'Available' : 'Sold out' }}</small></button>@endforeach</div>@endif</div>@endforeach</div></div>
                     <form method="POST" action="{{ route('booking-searches.destroy', $search) }}" data-ajax-delete>@csrf @method('DELETE')<button type="submit" class="text-button">Remove</button></form>
                 </div>
                 @endforeach
@@ -88,6 +89,15 @@
     .availability-note { margin: 20px 0 0; line-height: 1.6; }
     .watch-status { flex: 0 0 auto; }
     .schedule-grid { gap: 10px; }
+    .ticket-visibility-panel { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 28px; flex-wrap: wrap; }
+    .ticket-visibility-panel h3 { font-size: 16px; margin: 4px 0 2px; }
+    .ticket-visibility-panel .field-help { margin: 0; }
+    .toggle-switch { position: relative; display: inline-flex; flex: 0 0 auto; cursor: pointer; }
+    .toggle-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .toggle-track { display: block; width: 42px; height: 24px; border-radius: 999px; background: #d9e0e8; transition: background .15s; }
+    .toggle-thumb { display: block; width: 18px; height: 18px; margin: 3px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(15, 23, 42, .25); transition: transform .15s; }
+    .toggle-switch input:checked + .toggle-track { background: #6366f1; }
+    .toggle-switch input:checked + .toggle-track .toggle-thumb { transform: translateX(18px); }
     @media (max-width: 900px) { .main-content { gap: 18px; } }
     @media (max-width: 640px) { .availability-item, .watch-item { flex-wrap: wrap; padding: 16px; gap: 14px; } .availability-item .watch-details, .watch-item .watch-details { flex: 1 1 calc(100% - 80px); } .availability-item > form, .watch-item .watch-status { width: 100%; display: flex; justify-content: flex-end; gap: 14px; align-items: center; } .main-content .panel { padding: 20px 16px; } }
     @media (max-width: 640px) { .availability-panel .detected-items a.text-button { width: 100%; justify-content: center; } .main-content .panel { border-radius: 14px; } }
@@ -309,8 +319,35 @@
     });
     @endif
 
+    function tickNextCheckCountdowns() {
+        document.querySelectorAll('.next-check[data-next-check-at]').forEach((el) => {
+            const nextCheckAt = el.dataset.nextCheckAt;
+            if (!nextCheckAt) { el.textContent = ''; return; }
+            const remaining = Math.max(0, Math.round((new Date(nextCheckAt).getTime() - Date.now()) / 1000));
+            el.textContent = remaining > 0 ? `Next check in ${remaining}s` : 'Checking now…';
+        });
+    }
+
+    document.addEventListener('change', async (event) => {
+        const form = event.target.closest?.('form[data-ajax-toggle]');
+        if (!form || event.target.type !== 'checkbox') return;
+        try {
+            const response = await fetch(form.action, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' },
+            });
+            if (!response.ok) throw new Error('Unable to update ticket visibility.');
+            await refreshDashboard();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    });
+
     bindAjaxActions();
-    window.setInterval(refreshDashboard, 60000);
+    tickNextCheckCountdowns();
+    window.setInterval(tickNextCheckCountdowns, 1000);
+    window.setInterval(refreshDashboard, {{ max(5, $checkIntervalSeconds) * 1000 }});
 </script>
 </body>
 </html>

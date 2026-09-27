@@ -14,7 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withBroadcasting(__DIR__.'/../routes/channels.php', ['middleware' => ['web', 'auth']])
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->command('vatican:check-availability')->everyMinute()->withoutOverlapping(5);
+        $schedule->command('vatican:check-availability')->everySecond()->withoutOverlapping(5);
     })
     ->withMiddleware(function (Middleware $middleware): void {
         //

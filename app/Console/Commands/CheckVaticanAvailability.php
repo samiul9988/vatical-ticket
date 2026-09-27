@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Events\PriorityTicketAvailable;
 use App\Models\BookingSearch;
+use App\Models\Setting;
 use App\Models\User;
 use App\Notifications\TicketAvailabilityDetected;
 use App\Services\VaticanAvailabilityChecker;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Cache;
 #[Description('Check active Vatican ticket watches at a safe interval')]
 class CheckVaticanAvailability extends Command
 {
+    public const DEFAULT_INTERVAL_SECONDS = 60;
+
     /**
      * Execute the console command.
      */
@@ -30,6 +33,8 @@ class CheckVaticanAvailability extends Command
             return self::SUCCESS;
         }
 
+        $intervalSeconds = (int) Setting::get('check_interval_seconds', (string) self::DEFAULT_INTERVAL_SECONDS);
+
         foreach ($searches as $search) {
             $wasAvailable = $search->status === 'manual_review' && ! empty($search->availability_items);
 
@@ -39,7 +44,7 @@ class CheckVaticanAvailability extends Command
                 $search->update([
                     'attempts' => $search->attempts + 1,
                     'last_checked_at' => now(),
-                    'next_check_at' => now()->addMinute(),
+                    'next_check_at' => now()->addSeconds($intervalSeconds),
                     'last_error' => $exception->getMessage(),
                 ]);
 
@@ -51,7 +56,7 @@ class CheckVaticanAvailability extends Command
             $search->update([
                 'attempts' => $search->attempts + 1,
                 'last_checked_at' => now(),
-                'next_check_at' => now()->addMinute(),
+                'next_check_at' => now()->addSeconds($intervalSeconds),
                 'last_error' => null,
             ]);
 

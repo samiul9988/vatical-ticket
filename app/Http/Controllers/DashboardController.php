@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Console\Commands\CheckVaticanAvailability;
 use App\Models\BookingSearch;
 use App\Models\NotificationSound;
+use App\Models\Setting;
 use App\Services\VaticanAvailabilityChecker;
+use App\Support\PriorityTickets;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -14,16 +17,46 @@ class DashboardController extends Controller
 {
     public function index(): View
     {
+        $showAllTickets = Setting::get('show_all_tickets', 'true') === 'true';
+
+        $availableSearches = BookingSearch::query()
+            ->where('status', 'manual_review')
+            ->latest('detected_at')
+            ->get();
+
+        if (! $showAllTickets) {
+            $availableSearches = $availableSearches
+                ->map(function (BookingSearch $search): BookingSearch {
+                    $search->availability_items = collect($search->availability_items ?? [])
+                        ->filter(fn (array $item): bool => PriorityTickets::matches($item['title']))
+                        ->values()
+                        ->all();
+
+                    return $search;
+                })
+                ->filter(fn (BookingSearch $search): bool => ! empty($search->availability_items))
+                ->values();
+        }
+
         return view('dashboard', [
             'searches' => BookingSearch::query()->latest()->get(),
-            'availableSearches' => BookingSearch::query()
-                ->where('status', 'manual_review')
-                ->latest('detected_at')
-                ->get(),
+            'availableSearches' => $availableSearches,
             'soundUrl' => NotificationSound::activeUrl(),
             'watchingCount' => BookingSearch::query()->where('status', 'watching')->count(),
             'bookedCount' => BookingSearch::query()->where('status', 'booked')->count(),
+            'checkIntervalSeconds' => (int) Setting::get(
+                'check_interval_seconds',
+                (string) CheckVaticanAvailability::DEFAULT_INTERVAL_SECONDS
+            ),
+            'showAllTickets' => $showAllTickets,
         ]);
+    }
+
+    public function updateTicketVisibility(Request $request): RedirectResponse
+    {
+        Setting::set('show_all_tickets', $request->boolean('show_all_tickets') ? 'true' : 'false');
+
+        return to_route('dashboard')->with('success', 'Ticket visibility updated.');
     }
 
     public function store(Request $request): RedirectResponse|JsonResponse

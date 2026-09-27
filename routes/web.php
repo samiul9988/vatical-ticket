@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthenticatedSessionController;
+use App\Http\Controllers\BookingSearchWatchController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificationSoundController;
 use Illuminate\Support\Facades\Route;
@@ -16,6 +17,9 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/booking-searches/{search}/stop', [DashboardController::class, 'stop'])->name('booking-searches.stop');
     Route::delete('/booking-searches/{search}', [DashboardController::class, 'destroy'])->name('booking-searches.destroy');
     Route::get('/booking-searches/{search}/availability/{item}', [DashboardController::class, 'openAvailability'])->name('booking-searches.availability');
+    Route::patch('/settings/ticket-visibility', [DashboardController::class, 'updateTicketVisibility'])->name('settings.ticket-visibility.update');
+    Route::get('/watches', [BookingSearchWatchController::class, 'index'])->name('watches.index');
+    Route::patch('/watches', [BookingSearchWatchController::class, 'update'])->name('watches.update');
     Route::get('/sounds', [NotificationSoundController::class, 'index'])->name('sounds.index');
     Route::post('/sounds', [NotificationSoundController::class, 'store'])->name('sounds.store');
     Route::post('/sounds/default', [NotificationSoundController::class, 'useDefault'])->name('sounds.default');

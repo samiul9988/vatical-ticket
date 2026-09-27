@@ -108,6 +108,7 @@ class VaticanAvailabilityChecker
                 'time' => (string) ($slot['time'] ?? ''),
                 'availability' => (string) ($slot['availability'] ?? 'UNKNOWN'),
             ])
+            ->unique('time')
             ->values()
             ->all();
     }

@@ -4,6 +4,7 @@
         <a @class(['active' => $active === 'overview']) href="{{ route('dashboard') }}">Overview <span>⌂</span></a>
         <a href="{{ route('dashboard') }}#new-search">Availability watcher <span>◷</span></a>
         <a href="{{ route('dashboard') }}#activity">Activity log <span>≋</span></a>
+        <a @class(['active' => $active === 'watches']) href="{{ route('watches.index') }}">Check interval <span>◔</span></a>
         <a @class(['active' => $active === 'sounds']) href="{{ route('sounds.index') }}">Notification sounds <span>♪</span></a>
     </nav>
     <div class="sidebar-foot">Official ticket workflow<br><small>Human checkout handoff enabled</small></div>
