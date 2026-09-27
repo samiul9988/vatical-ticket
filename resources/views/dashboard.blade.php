@@ -136,6 +136,7 @@
     .rt-card em { display: block; margin-top: 8px; font-style: normal; font-size: 12px; font-weight: 700; }
     .rt-card.leaving { animation: rt-out .3s ease-in forwards; }
     .flash-target { animation: flash-target 2.4s ease-out 1; }
+    .flash { font-size: 16px; font-weight: 700; line-height: 1.5; padding: 16px 20px; }
     @keyframes rt-in { from { transform: translateX(110%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     @keyframes rt-out { to { transform: translateX(110%); opacity: 0; } }
     @keyframes flash-target { 0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); } 20%, 60% { box-shadow: 0 0 0 8px rgba(245, 158, 11, .55); } }
