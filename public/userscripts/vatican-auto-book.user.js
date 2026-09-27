@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Vatican Ticket Auto Booker
 // @namespace    vatican-ticket-admin
-// @version      2.9
-// @description  Opens selected Vatican ticket, fills options, selects time and reliably clicks PROCEED. Stops before payment.
+// @version      3.1
+// @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY.
 // @match        https://tickets.museivaticani.va/*
 // @run-at       document-start
 // @grant        none
@@ -33,6 +33,15 @@
                 reduced: hashParams.get('reduced'),
                 lang: hashParams.get('lang'),
                 time: hashParams.get('time'),
+                mSurname: hashParams.get('mSurname'),
+                mName: hashParams.get('mName'),
+                mSex: hashParams.get('mSex'),
+                mCountry: hashParams.get('mCountry'),
+                mCity: hashParams.get('mCity'),
+                mBirthdate: hashParams.get('mBirthdate'),
+                mEmail: hashParams.get('mEmail'),
+                mMobile: hashParams.get('mMobile'),
+                mLanguage: hashParams.get('mLanguage'),
                 at: Date.now()
             })
         );
@@ -472,6 +481,19 @@
 
 
             if (!option) {
+
+                /*
+                 * No match — close the dropdown back up instead
+                 * of leaving it open (it was toggled open by the
+                 * input.click() above).
+                 */
+
+                try {
+                    input.click();
+                } catch (e) {}
+
+                fire(input);
+
                 return false;
             }
 
@@ -1746,6 +1768,255 @@
 
     /*
      * ============================================================
+     * MANAGER DATA (checkout contact-person form)
+     *
+     * This runs only after PROCEED has genuinely opened the next
+     * step. It fills the "Manager data" form fields confirmed
+     * against the live DOM: plain inputs matched by
+     * formcontrolname, and Sex/Country/Language which use the
+     * same custom <app-dropdown> component as the ticket panel
+     * (reusing dropdownInput()/chooseOption() from there).
+     *
+     * It deliberately does NOT touch the Participants list, the
+     * terms/privacy checkboxes, or the BUY button — those stay
+     * fully manual.
+     * ============================================================
+     */
+
+    const setFormInput =
+        (
+            formcontrolname,
+            value
+        ) => {
+
+            if (! value) {
+                return false;
+            }
+
+            const input =
+                document.querySelector(
+                    `input[formcontrolname="${formcontrolname}"]`
+                );
+
+            if (! input) {
+                return false;
+            }
+
+            const setter =
+                Object.getOwnPropertyDescriptor(
+                    window.HTMLInputElement.prototype,
+                    'value'
+                )?.set;
+
+            try {
+
+                if (setter) {
+                    setter.call(input, value);
+                } else {
+                    input.value = value;
+                }
+
+            } catch (e) {
+
+                input.value = value;
+            }
+
+            input.dispatchEvent(
+                new Event('input', {
+                    bubbles: true
+                })
+            );
+
+            input.dispatchEvent(
+                new Event('change', {
+                    bubbles: true
+                })
+            );
+
+            fire(input);
+
+            return true;
+        };
+
+
+    const setFormDropdown =
+        async (
+            formcontrolname,
+            wantedValue
+        ) => {
+
+            if (! wantedValue) {
+                return false;
+            }
+
+            const dropdown =
+                document.querySelector(
+                    `app-dropdown[formcontrolname="${formcontrolname}"]`
+                );
+
+            if (! dropdown) {
+                return false;
+            }
+
+            const wanted =
+                normalise(
+                    wantedValue
+                );
+
+            return chooseOption(
+                dropdown,
+                text => {
+
+                    const value =
+                        normalise(
+                            text
+                        );
+
+                    return (
+                        value === wanted ||
+                        (
+                            value.length > 2 &&
+                            wanted.length > 2 &&
+                            value.slice(0, 3) ===
+                            wanted.slice(0, 3)
+                        )
+                    );
+                }
+            );
+        };
+
+
+    /*
+     * Site expects dd/mm/yyyy; our stored value is yyyy-mm-dd
+     * (HTML5 date input format from the admin settings page).
+     */
+
+    const toSiteDate =
+        isoDate => {
+
+            const match =
+                /^(\d{4})-(\d{2})-(\d{2})$/.exec(
+                    isoDate || ''
+                );
+
+            if (! match) {
+                return null;
+            }
+
+            const [, year, month, day] =
+                match;
+
+            return `${day}/${month}/${year}`;
+        };
+
+
+    const fillManagerData =
+        async () => {
+
+            const opened =
+                await until(
+                    () =>
+                        document.querySelector(
+                            'app-manager-form'
+                        ),
+                    15000,
+                    300
+                );
+
+            if (! opened) {
+
+                say(
+                    'Manager data form did not open — fill it in yourself.',
+                    '#b45309'
+                );
+
+                return false;
+            }
+
+            say(
+                'filling Manager data…',
+                '#047857'
+            );
+
+            const results = {
+                surname: setFormInput('surname', pending.mSurname),
+                name: setFormInput('name', pending.mName),
+                city: setFormInput('city', pending.mCity),
+                email: setFormInput('email', pending.mEmail),
+                confirmEmail: setFormInput('confirmEmail', pending.mEmail),
+                telephoneNumber: setFormInput('telephoneNumber', pending.mMobile)
+            };
+
+            const birthdate =
+                toSiteDate(
+                    pending.mBirthdate
+                );
+
+            if (birthdate) {
+
+                const dateInput =
+                    document.querySelector(
+                        '[data-cy="dateCalendar"]'
+                    );
+
+                if (dateInput) {
+
+                    try {
+                        dateInput.value = birthdate;
+                    } catch (e) {}
+
+                    dateInput.dispatchEvent(
+                        new Event('input', {
+                            bubbles: true
+                        })
+                    );
+
+                    dateInput.dispatchEvent(
+                        new Event('change', {
+                            bubbles: true
+                        })
+                    );
+
+                    fire(dateInput);
+
+                    results.birthdate = true;
+                }
+            }
+
+            results.gender =
+                await setFormDropdown(
+                    'gender',
+                    pending.mSex
+                );
+
+            results.country =
+                await setFormDropdown(
+                    'country',
+                    pending.mCountry
+                );
+
+            results.language =
+                await setFormDropdown(
+                    'language',
+                    pending.mLanguage
+                );
+
+            console.log(
+                '[auto-book] manager data fill results:',
+                results
+            );
+
+            say(
+                'Manager data filled. Review it, then complete Participants and BUY yourself.',
+                '#047857'
+            );
+
+            return true;
+        };
+
+
+    /*
+     * ============================================================
      * MAIN
      * ============================================================
      */
@@ -1964,14 +2235,15 @@
         if (success) {
 
             /*
-             * Stop here.
-             *
-             * No payment.
-             * No checkout.
+             * Fill the Manager data (contact person) form, then
+             * stop. Participants list, terms/privacy checkboxes
+             * and BUY are never touched — those stay manual.
              */
 
+            await fillManagerData();
+
             console.log(
-                '[auto-book] automation stopped after PROCEED.'
+                '[auto-book] automation stopped after filling Manager data.'
             );
 
         } else {
@@ -1982,7 +2254,7 @@
         }
 
 
-        await wait(5000);
+        await wait(8000);
 
         if (banner) {
             banner.remove();

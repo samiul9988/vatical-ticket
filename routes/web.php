@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthenticatedSessionController;
+use App\Http\Controllers\BookingContactController;
 use App\Http\Controllers\BookingSearchWatchController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificationSoundController;
@@ -20,6 +21,8 @@ Route::middleware('auth')->group(function (): void {
     Route::patch('/settings/ticket-visibility', [DashboardController::class, 'updateTicketVisibility'])->name('settings.ticket-visibility.update');
     Route::get('/watches', [BookingSearchWatchController::class, 'index'])->name('watches.index');
     Route::patch('/watches', [BookingSearchWatchController::class, 'update'])->name('watches.update');
+    Route::get('/booking-contact', [BookingContactController::class, 'index'])->name('booking-contact.index');
+    Route::patch('/booking-contact', [BookingContactController::class, 'update'])->name('booking-contact.update');
     Route::get('/sounds', [NotificationSoundController::class, 'index'])->name('sounds.index');
     Route::post('/sounds', [NotificationSoundController::class, 'store'])->name('sounds.store');
     Route::post('/sounds/default', [NotificationSoundController::class, 'useDefault'])->name('sounds.default');

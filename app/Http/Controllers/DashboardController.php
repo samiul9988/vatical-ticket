@@ -119,6 +119,8 @@ class DashboardController extends Controller
 
         $title = collect($search->availability_items ?? [])->firstWhere('id', $item)['title'] ?? '';
 
+        $contact = BookingContactController::contact();
+
         $handoff = http_build_query([
             'book' => $item,
             'title' => $title,
@@ -126,6 +128,15 @@ class DashboardController extends Controller
             'reduced' => max(0, min(30, $request->integer('reduced'))),
             'lang' => $request->string('lang', 'English')->limit(20)->toString(),
             'time' => $request->string('time')->limit(10)->toString(),
+            'mSurname' => (string) $contact['surname'],
+            'mName' => (string) $contact['name'],
+            'mSex' => (string) $contact['sex'],
+            'mCountry' => (string) $contact['country'],
+            'mCity' => (string) $contact['city'],
+            'mBirthdate' => (string) $contact['birthdate'],
+            'mEmail' => (string) $contact['email'],
+            'mMobile' => (string) $contact['mobile'],
+            'mLanguage' => (string) $contact['language'],
         ]);
 
         return redirect()->away($url.'#'.$handoff);
