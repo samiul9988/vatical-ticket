@@ -24,7 +24,7 @@
             <section class="panel form-panel" id="new-search"><div class="panel-heading"><div><p class="eyebrow">STEP 01</p><h3>Start an availability watch</h3></div><span class="step-badge">CONFIGURE</span></div>
                 <form method="POST" action="{{ route('booking-searches.store') }}" data-ajax-form>
                     @csrf
-                    <div class="form-row"><label>Visit date<input type="date" name="visit_date" min="{{ now()->toDateString() }}" value="{{ old('visit_date', now()->addDay()->toDateString()) }}" required><small>Select the date from the Vatican calendar.</small></label><label>Visitors<input type="number" name="visitor_count" min="1" max="30" value="{{ old('visitor_count', 1) }}" required><small>Maximum 30 visitors per watch.</small></label></div>
+                    <div class="form-row"><label>Visit date<input type="date" name="visit_date" min="{{ now()->toDateString() }}" value="{{ old('visit_date', now()->toDateString()) }}" required><small>Select the date from the Vatican calendar.</small></label><label>Visitors<input type="number" name="visitor_count" min="1" max="30" value="{{ old('visitor_count', 1) }}" required><small>Maximum 30 visitors per watch.</small></label></div>
                     @foreach(['09:00','09:30','10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30','14:00','14:30'] as $time)<input type="hidden" name="schedules[]" value="{{ $time }}">@endforeach
                     <div class="form-footer"><span>Next: availability only. Checkout stays manual.</span><button type="submit" class="button primary submit-button"><span class="button-label">Confirm watch <span>→</span></span><span class="button-spinner" aria-hidden="true"></span></button></div>
                 </form>
