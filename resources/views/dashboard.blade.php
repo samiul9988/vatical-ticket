@@ -129,11 +129,13 @@
     .sound-toggle { border: 1px solid #d9e0e8; background: #fff; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; margin-right: 8px; }
     .sound-toggle.on { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
     #realtime-notifications { position: fixed; top: 84px; right: 0; z-index: 1500; display: grid; gap: 12px; padding-right: 16px; max-width: 100vw; }
-    .rt-card { width: min(360px, calc(100vw - 32px)); background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border-radius: 16px 0 0 16px; padding: 16px 18px; box-shadow: 0 16px 40px rgba(217, 119, 6, .45); cursor: pointer; animation: rt-in .45s cubic-bezier(.2, .9, .3, 1.2); border-left: 6px solid #fff7ed; }
-    .rt-card small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; opacity: .9; }
-    .rt-card strong { display: block; font-size: 15px; margin: 4px 0; }
+    .rt-card { position: relative; width: min(360px, calc(100vw - 32px)); background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; border-radius: 16px 0 0 16px; padding: 16px 18px; box-shadow: 0 16px 40px rgba(217, 119, 6, .45); cursor: pointer; animation: rt-in .45s cubic-bezier(.2, .9, .3, 1.2); border-left: 6px solid #fff7ed; }
+    .rt-card small { display: block; font-size: 10px; font-weight: 800; letter-spacing: .12em; opacity: .9; padding-right: 22px; }
+    .rt-card strong { display: block; font-size: 15px; margin: 4px 0; padding-right: 22px; }
     .rt-card span { font-size: 12px; opacity: .95; }
     .rt-card em { display: block; margin-top: 8px; font-style: normal; font-size: 12px; font-weight: 700; }
+    .rt-card .rt-close { position: absolute; top: 10px; right: 12px; width: 22px; height: 22px; border: none; border-radius: 50%; background: rgba(255, 255, 255, .25); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+    .rt-card .rt-close:hover { background: rgba(255, 255, 255, .4); }
     .rt-card.leaving { animation: rt-out .3s ease-in forwards; }
     .flash-target { animation: flash-target 2.4s ease-out 1; }
     .flash { font-size: 16px; font-weight: 700; line-height: 1.5; padding: 16px 20px; }
@@ -290,10 +292,14 @@
         const container = document.getElementById('realtime-notifications');
         const card = document.createElement('div');
         card.className = 'rt-card';
-        card.innerHTML = '<small>PRIORITY TICKET AVAILABLE</small><strong></strong><span></span><em>Click to jump to the Book button →</em>';
+        card.innerHTML = '<button type="button" class="rt-close" aria-label="Dismiss">✕</button><small>PRIORITY TICKET AVAILABLE</small><strong></strong><span></span><em>Click to jump to the Book button →</em>';
         card.querySelector('strong').textContent = data.title;
         card.querySelector('span').textContent = `${data.visit_date} · ${data.visitor_count} ${data.visitor_count === 1 ? 'visitor' : 'visitors'}`;
         const dismiss = () => { card.classList.add('leaving'); window.setTimeout(() => card.remove(), 300); };
+        card.querySelector('.rt-close').addEventListener('click', (event) => {
+            event.stopPropagation();
+            dismiss();
+        });
         card.addEventListener('click', () => {
             const target = document.getElementById(`ticket-${data.search_id}-${data.item_id}`);
             dismiss();

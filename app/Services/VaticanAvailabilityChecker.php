@@ -74,6 +74,7 @@ class VaticanAvailabilityChecker
         return Http::acceptJson()
             ->connectTimeout(8)
             ->timeout(12)
+            ->retry(3, 400, throw: false)
             ->withOptions(['cookies' => new CookieJar]);
     }
 
@@ -91,14 +92,26 @@ class VaticanAvailabilityChecker
             'visitDate' => $search->visit_date->format('d/m/Y'),
         ];
 
-        try {
-            $client->get($this->officialBaseUrl().'/api/visit', $query);
-            $response = $client->get($this->officialBaseUrl().'/api/visit/timeavail', $query + ['visitLang' => 'ENG']);
-        } catch (\Throwable) {
-            return null;
+        $response = null;
+
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            try {
+                $client->get($this->officialBaseUrl().'/api/visit', $query);
+                $response = $client->get($this->officialBaseUrl().'/api/visit/timeavail', $query + ['visitLang' => '']);
+            } catch (\Throwable) {
+                $response = null;
+            }
+
+            if ($response !== null && $response->successful()) {
+                break;
+            }
+
+            if ($attempt < 3) {
+                usleep(400_000);
+            }
         }
 
-        if ($response->failed()) {
+        if ($response === null || $response->failed()) {
             return null;
         }
 
