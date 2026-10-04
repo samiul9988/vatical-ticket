@@ -1,12 +1,104 @@
 // ==UserScript==
 // @name         Vatican Ticket Auto Booker
 // @namespace    vatican-ticket-admin
-// @version      3.1
-// @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY.
+// @version      3.2
+// @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY. Also keeps the checkout reservation alive with periodic session pings.
 // @match        https://tickets.museivaticani.va/*
 // @run-at       document-start
 // @grant        none
 // ==/UserScript==
+
+/*
+ * ============================================================
+ * CHECKOUT KEEP-ALIVE
+ *
+ * Runs on every page load, independently of the booking
+ * automation below (which only acts within a short window after
+ * clicking "Book" from the admin dashboard). If a sitting tab is
+ * left idle on the checkout step, the server can expire the
+ * reservation hold and bounce the ticket back to availability.
+ *
+ * Once the checkout step is detected, this periodically
+ * re-requests the current page under the same session cookie
+ * (touches the server-side JSESSIONID session) and dispatches a
+ * light synthetic pointer event (defeats any client-side idle
+ * timer). It never touches form fields, Participants, or BUY —
+ * purely a read-only session heartbeat.
+ * ============================================================
+ */
+
+(() => {
+    'use strict';
+
+    const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    const isCheckoutPage = () =>
+        /\/checkout\b/i.test(location.pathname) ||
+        /\bvisit recap\b/i.test(document.body?.textContent || '');
+
+    let started = false;
+
+    const beat = async () => {
+
+        try {
+
+            await fetch(location.href, {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store'
+            });
+
+        } catch (e) {
+
+            console.log('[auto-book] keep-alive fetch failed', e);
+        }
+
+        try {
+
+            document.dispatchEvent(
+                new MouseEvent('mousemove', {
+                    bubbles: true,
+                    clientX: Math.floor(Math.random() * window.innerWidth),
+                    clientY: Math.floor(Math.random() * window.innerHeight)
+                })
+            );
+
+        } catch (e) {}
+
+        console.log('[auto-book] checkout keep-alive ping sent');
+    };
+
+    const startKeepAlive = () => {
+
+        if (started) return;
+        started = true;
+
+        console.log('[auto-book] checkout keep-alive started');
+
+        beat();
+
+        setInterval(beat, 25000);
+    };
+
+    (async () => {
+
+        while (!document.body) {
+            await wait(200);
+        }
+
+        while (true) {
+
+            if (isCheckoutPage()) {
+                startKeepAlive();
+                return;
+            }
+
+            await wait(2000);
+        }
+
+    })();
+
+})();
 
 (() => {
     'use strict';
