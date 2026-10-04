@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Vatican Ticket Auto Booker
 // @namespace    vatican-ticket-admin
-// @version      3.2
-// @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY. Also keeps the checkout reservation alive with periodic session pings.
+// @version      3.3
+// @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY. Also simulates light activity on checkout so a sitting tab isn't treated as idle.
 // @match        https://tickets.museivaticani.va/*
 // @run-at       document-start
 // @grant        none
@@ -10,20 +10,21 @@
 
 /*
  * ============================================================
- * CHECKOUT KEEP-ALIVE
+ * CHECKOUT IDLE-ACTIVITY PING
  *
  * Runs on every page load, independently of the booking
  * automation below (which only acts within a short window after
- * clicking "Book" from the admin dashboard). If a sitting tab is
- * left idle on the checkout step, the server can expire the
- * reservation hold and bounce the ticket back to availability.
+ * clicking "Book" from the admin dashboard).
  *
- * Once the checkout step is detected, this periodically
- * re-requests the current page under the same session cookie
- * (touches the server-side JSESSIONID session) and dispatches a
- * light synthetic pointer event (defeats any client-side idle
- * timer). It never touches form fields, Participants, or BUY —
- * purely a read-only session heartbeat.
+ * v3.2 also re-fetched the full checkout page under the session
+ * cookie every 25s to try to keep the reservation hold alive.
+ * That tripped Cloudflare's bot detection on this
+ * Cloudflare-protected checkout and corrupted the session
+ * (participant/service counts went out of sync, desc API started
+ * returning 500 on BUY) — removed. This now only dispatches a
+ * light synthetic pointer event (defeats a client-side idle
+ * timer) with no network calls at all, so it can't touch
+ * Cloudflare or the server session.
  * ============================================================
  */
 
@@ -38,20 +39,7 @@
 
     let started = false;
 
-    const beat = async () => {
-
-        try {
-
-            await fetch(location.href, {
-                method: 'GET',
-                credentials: 'include',
-                cache: 'no-store'
-            });
-
-        } catch (e) {
-
-            console.log('[auto-book] keep-alive fetch failed', e);
-        }
+    const beat = () => {
 
         try {
 
@@ -65,7 +53,7 @@
 
         } catch (e) {}
 
-        console.log('[auto-book] checkout keep-alive ping sent');
+        console.log('[auto-book] checkout idle-activity ping sent');
     };
 
     const startKeepAlive = () => {
@@ -73,7 +61,7 @@
         if (started) return;
         started = true;
 
-        console.log('[auto-book] checkout keep-alive started');
+        console.log('[auto-book] checkout idle-activity ping started');
 
         beat();
 
