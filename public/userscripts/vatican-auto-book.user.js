@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Vatican Ticket Auto Booker
 // @namespace    vatican-ticket-admin
-// @version      3.3
+// @version      3.4
 // @description  Opens selected Vatican ticket, fills options, selects time, clicks PROCEED, and fills the Manager data contact form. Stops before Participants/terms/BUY. Also simulates light activity on checkout so a sitting tab isn't treated as idle.
 // @match        https://tickets.museivaticani.va/*
 // @run-at       document-start
@@ -21,10 +21,25 @@
  * That tripped Cloudflare's bot detection on this
  * Cloudflare-protected checkout and corrupted the session
  * (participant/service counts went out of sync, desc API started
- * returning 500 on BUY) — removed. This now only dispatches a
- * light synthetic pointer event (defeats a client-side idle
- * timer) with no network calls at all, so it can't touch
- * Cloudflare or the server session.
+ * returning 500 on BUY) — removed. v3.3 switched to a raw
+ * document-level mousemove only (no network calls).
+ *
+ * v3.4 additionally focuses then blurs a real, empty, visible
+ * text input already on the page (never types into it or
+ * changes its value) — a genuine DOM engagement signal closer to
+ * what a person idly reviewing the form does.
+ *
+ * IMPORTANT CAVEAT (confirmed by a captured DevTools recording):
+ * the site's own Angular app already polls /api/visit/recap
+ * repeatedly on its own while sitting on the Visit Recap step —
+ * real, continuous network activity with zero help from this
+ * script — and the reservation still expired after ~30 minutes.
+ * That strongly suggests the hold has a hard, non-extendable
+ * server-side TTL that no client-side activity (real or
+ * synthetic) can prevent. These pings may still help against a
+ * purely client-side idle/inactivity timer if one also exists,
+ * but don't expect them to beat a hard server timeout — finishing
+ * checkout within the window is the only guaranteed fix.
  * ============================================================
  */
 
@@ -39,6 +54,41 @@
 
     let started = false;
 
+    /*
+     * Focus then immediately blur a real, visible, empty text
+     * input already on the page (e.g. the Surname field on the
+     * Manager data / Participants steps), WITHOUT typing or
+     * changing its value. This is a genuine DOM focus/blur cycle
+     * Angular's own reactive-forms bindings see as real
+     * engagement, unlike a raw document-level mousemove — closer
+     * to what a person idly reviewing the form would do, and it
+     * never touches any value, service, or participant data.
+     */
+
+    const nudgeRealInput = () => {
+
+        try {
+
+            const input =
+                Array.from(
+                    document.querySelectorAll('input[type="text"], input:not([type])')
+                ).find(el => {
+
+                    if (el.disabled || el.value) return false;
+
+                    const rect = el.getBoundingClientRect();
+
+                    return rect.width > 0 && rect.height > 0;
+                });
+
+            if (!input) return;
+
+            input.focus({ preventScroll: true });
+            input.blur();
+
+        } catch (e) {}
+    };
+
     const beat = () => {
 
         try {
@@ -52,6 +102,8 @@
             );
 
         } catch (e) {}
+
+        nudgeRealInput();
 
         console.log('[auto-book] checkout idle-activity ping sent');
     };
