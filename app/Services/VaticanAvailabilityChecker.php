@@ -51,6 +51,16 @@ class VaticanAvailabilityChecker
         ];
     }
 
+    /**
+     * Builds the booking URL straight from the search's own fields
+     * (visitor count, visit date) without any live Vatican API
+     * call — the URL doesn't depend on live data, and the item's
+     * availability is already fresh from the scheduler's last
+     * check (within the last check-interval window). Hitting
+     * Vatican again here just to re-verify before redirecting adds
+     * several seconds of delay between clicking "Book" and the
+     * Vatican tab actually starting to load, for no benefit.
+     */
     public function bookingUrlForItem(BookingSearch $search, string $itemId): ?string
     {
         $storedItem = collect($search->availability_items ?? [])->firstWhere('id', $itemId);
@@ -59,14 +69,7 @@ class VaticanAvailabilityChecker
             return null;
         }
 
-        $availability = $this->check($search);
-        $currentItem = collect($availability['items'])->firstWhere('title', $storedItem['title']);
-
-        if (! is_array($currentItem)) {
-            return null;
-        }
-
-        return $availability['url'];
+        return $this->bookingUrl($search);
     }
 
     private function client(): PendingRequest
